@@ -1,0 +1,37 @@
+name: Build Geovanta Windows 64-Bit Installer
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust stable (x86_64-pc-windows-msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Build Windows 64-Bit Installer (.exe & .msi)
+        run: cargo tauri build --target x86_64-pc-windows-msvc
+
+      - name: Upload Windows 64-Bit Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Geovanta-Windows-64bit-Installer
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*_x64-setup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*_x64_*.msi

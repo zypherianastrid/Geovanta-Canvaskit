@@ -1,0 +1,21 @@
+{
+  "name": "geovanta-vector-studio-win64",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Geovanta Vector Studio — 64-Bit Windows Desktop Application (Rust + Tauri + React JSX + Tailwind CSS, 100% Offline Bundle)",
+  "scripts": {
+    "build:web": "node scripts/build-offline-bundle.js",
+    "tauri:dev": "tauri dev",
+    "tauri:build:win64": "node scripts/build-offline-bundle.js && tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:nsis": "node scripts/build-offline-bundle.js && tauri build --target x86_64-pc-windows-msvc --bundles nsis",
+    "tauri:build:msi": "node scripts/build-offline-bundle.js && tauri build --target x86_64-pc-windows-msvc --bundles msi"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwindcss": "3.4.17"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

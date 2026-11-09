@@ -1,0 +1,182 @@
+/**
+ * @file src/engine/vectorEngine.jsx
+ * @description Objek agregator utama mesin vektor (VE) yang menyatukan seluruh modul geometri
+ */
+import { computeViewBoxTransform, parseTransform } from './transformMatrixParser.jsx';
+import { computeImageParGeometry, makeTextObj, updateTextObj, measureTextBox, formatTextLines, textMatrix, syncTextTransformFromSubs, makeImageObj, imageMatrix, scaleObj, docBounds } from './textAndImageEngine.jsx';
+import { isHittable, hitTestObject, updateSpatialIndexForObjects, tightBBox, segAnalyticBBox, cubicExtrema1D, getDocSpatialIndex, nearOnSeg } from './spatialIndexAndHitTest.jsx';
+import { deleteNonCornerNodes, pruneNonCornerSub, autoRefineGeometry, classifySubpathNodesDynamic } from './autoRefineGeometry.jsx';
+import { VC_HANDLES, affineIdentity, affineTranslate, affineScale, affineRotate, affineMul, affineInverse, affineDet, affinePt, transformRectBbox, normalizeDeg, getObjBboxAngle, transformedAngle, transformObject, createOrientedBox, docBboxAngle, selectionOrientedBox, boxHit, scaleForDrag, rotateForDrag, handleCursor, rotateCursorForPt, arrangeZOrder, measureDistanceGuides } from './affineAndOrientedBox.jsx';
+import { compactGroups, applyAutoLayout, applyFramePadding, applyArtboardPadding, createFrame, frameBounds, listFrames, reparentDroppedObjects, inferFrameAutoLayout } from './figmaAutoLayoutAndFrames.jsx';
+import { selectionMetrics, pinPoint, alignSelection, rotateObjAround, setSelectionPosition, setSelectionDimension, setSelectionRotation, flipSelection, scaleObjXY } from './selectionTransformAndAlign.jsx';
+import { parseSVG } from './svgDocumentParser.jsx';
+import { gradOn, strokeGradOn, mapGrad, ensureGradModel, updateGradStops, sampleGradAt, simplifyGradStops, simplifyGradStopsTo, gradAngleDeg, setGradAngleDeg, projectPointToGrad, gradPointAt } from './gradientEngine.jsx';
+import { serializeDoc } from './svgDocumentSerializer.jsx';
+import { autoHandles, deleteNodes, typeNodes, mirrorNodes, sharpenCorners, smoothSelectedNodes } from './nodeEditingAndHandles.jsx';
+import { serializePath, serializeSub, nodeCount } from './svgPathSerializer.jsx';
+import { parsePath } from './svgPathParser.jsx';
+import { straighten, alignNodes, alignHandles, alignNodesAtAngle, measureSelectedNodesAngle } from './straightenAndAlignNodes.jsx';
+import { fillet, refillet, hasFillet, restoreFillets, setSelectedNodesRadius, setCornerRadius } from './cornerFilletEngine.jsx';
+import { insertNode, insertMid, segPoint, translate, moveNodes, cloneObj } from './bezierSubdivisionAndMove.jsx';
+import { SNAP_PX, snapPt, snapMany, snapOutline, rebuildHandle, snapHandleCurve, buildSnapCache, solveMultiSnap } from './multiSnapSolver.jsx';
+import { parsePSorAI, exportEPS, exportAI, exportRaster } from './postscriptAiRasterIo.jsx';
+import { uid, dist, nrm, sub, add, mul, dot, cross, lerp, rd } from './vectorPrimitives.jsx';
+import { arcToCubics } from './arcToBezier.jsx';
+import { kasaFit, schneiderFit, detectAnomalies, EMPTY_INSPECTION } from './curveFittingAndAnomalies.jsx';
+import { fixAnomaly, fixAllAnomalies, SIMPLIFY_LEVEL, simplifyLevelTolerance, autoSimplifyLevel, simplifyWith, simplifySubpath, simplifyPart, simplifyDoc } from './topologicalCurveSimplifier.jsx';
+import { booleanDoc } from './pathBoolean.jsx';
+import { outlineStrokeDoc, offsetDoc } from './pathOffset.jsx';
+
+const VE = {
+  computeViewBoxTransform,
+  computeImageParGeometry,
+  isHittable,
+  hitTestObject,
+  updateSpatialIndexForObjects,
+  parseTransform,
+  deleteNonCornerNodes,
+  pruneNonCornerSub,
+  autoRefineGeometry,
+  classifySubpathNodesDynamic,
+  VC_HANDLES,
+  affineIdentity,
+  affineTranslate,
+  affineScale,
+  affineRotate,
+  affineMul,
+  affineInverse,
+  affineDet,
+  affinePt,
+  transformRectBbox,
+  normalizeDeg,
+  getObjBboxAngle,
+  transformedAngle,
+  transformObject,
+  createOrientedBox,
+  docBboxAngle,
+  selectionOrientedBox,
+  boxHit,
+  scaleForDrag,
+  rotateForDrag,
+  handleCursor,
+  rotateCursorForPt,
+  arrangeZOrder,
+  measureDistanceGuides,
+  compactGroups,
+  selectionMetrics,
+  pinPoint,
+  alignSelection,
+  rotateObjAround,
+  setSelectionPosition,
+  setSelectionDimension,
+  setSelectionRotation,
+  flipSelection,
+  applyAutoLayout,
+  applyFramePadding,
+  applyArtboardPadding,
+  createFrame,
+  frameBounds,
+  listFrames,
+  reparentDroppedObjects,
+  inferFrameAutoLayout,
+  parseSVG,
+  gradOn,
+  strokeGradOn,
+  mapGrad,
+  ensureGradModel,
+  updateGradStops,
+  sampleGradAt,
+  simplifyGradStops,
+  simplifyGradStopsTo,
+  gradAngleDeg,
+  setGradAngleDeg,
+  projectPointToGrad,
+  gradPointAt,
+  serializeDoc,
+  makeTextObj,
+  updateTextObj,
+  measureTextBox,
+  formatTextLines,
+  textMatrix,
+  syncTextTransformFromSubs,
+  makeImageObj,
+  imageMatrix,
+  scaleObj,
+  scaleObjXY,
+  autoHandles,
+  docBounds,
+  serializePath,
+  objToD: serializePath,
+  serializeSub,
+  parsePath,
+  straighten,
+  alignNodes,
+  alignHandles,
+  fillet,
+  deleteNodes,
+  typeNodes,
+  mirrorNodes,
+  insertNode,
+  insertMid,
+  segPoint,
+  translate,
+  moveNodes,
+  cloneObj,
+  SNAP_PX,
+  snapPt,
+  snapMany,
+  snapOutline,
+  rebuildHandle,
+  snapHandleCurve,
+  refillet,
+  hasFillet,
+  restoreFillets,
+  alignNodesAtAngle,
+  measureSelectedNodesAngle,
+  tightBBox,
+  segAnalyticBBox,
+  cubicExtrema1D,
+  getDocSpatialIndex,
+  nearOnSeg,
+  buildSnapCache,
+  solveMultiSnap,
+  parsePSorAI,
+  exportEPS,
+  exportAI,
+  exportRaster,
+  setSelectedNodesRadius,
+  setCornerRadius,
+  sharpenCorners,
+  smoothSelectedNodes,
+  nodeCount,
+  uid,
+  dist,
+  nrm,
+  sub,
+  add,
+  mul,
+  dot,
+  cross,
+  lerp,
+  rd,
+  arcToCubics,
+  kasaFit,
+  schneiderFit,
+  detectAnomalies,
+  fixAnomaly,
+  fixAllAnomalies,
+  EMPTY_INSPECTION,
+  SIMPLIFY_LEVEL,
+  simplifyLevelTolerance,
+  autoSimplifyLevel,
+  simplifyWith,
+  simplifySubpath,
+  simplifyPart,
+  simplifyDoc,
+  booleanDoc,
+  outlineStrokeDoc,
+  offsetDoc
+};
+
+export { VE };
+export default VE;
